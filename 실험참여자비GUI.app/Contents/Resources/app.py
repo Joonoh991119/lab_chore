@@ -100,6 +100,7 @@ def load_upload_wb(work_dir: str) -> openpyxl.Workbook:
     if os.path.exists(output) and _valid_xlsx(output):
         return openpyxl.load_workbook(output), output
 
+    # 신규 출력 파일 생성 (템플릿 또는 백업에서 복사)
     if os.path.exists(template) and _valid_xlsx(template):
         shutil.copy2(template, output)
     elif os.path.exists(backup):
@@ -110,6 +111,11 @@ def load_upload_wb(work_dir: str) -> openpyxl.Workbook:
             f"업로드 양식 템플릿을 찾을 수 없습니다.\n"
             f"원본: {template}\n백업: {backup}"
         )
+
+    # 샘플 데이터 제거 후 저장
+    wb_new = openpyxl.load_workbook(output)
+    _init_fresh_output(wb_new["Sheet1"])
+    wb_new.save(output)
     return openpyxl.load_workbook(output), output
 
 def find_end_row(ws) -> int:
@@ -117,6 +123,29 @@ def find_end_row(ws) -> int:
         if str(row[0].value).strip().upper() == "END":
             return row[0].row
     return ws.max_row + 1
+
+
+def _init_fresh_output(ws):
+    """템플릿의 샘플 데이터(금동이·은동이 등)를 제거하고 빈 업로드 양식으로 초기화.
+
+    결과 구조:
+        row 1~2 : 헤더 (손대지 않음)
+        row 3   : 값은 비어있지만 원본 스타일 보존 → copy_row_style 참조용
+        row 4   : END 마커
+    """
+    er = find_end_row(ws)           # 템플릿에서 END 위치(보통 row 5)
+
+    # row 3 스타일 보존 + 값만 제거 (스타일 참조 행으로 재활용)
+    for col in range(1, 19):
+        ws.cell(3, col).value = None
+
+    # row 4 이상 샘플 데이터 행 삭제 (END 행 직전까지)
+    rows_to_delete = er - 4         # 은동이 등 추가 샘플 수
+    if rows_to_delete > 0:
+        ws.delete_rows(4, rows_to_delete)
+
+    # END가 row 4에 위치하도록 보장
+    ws.cell(4, 1).value = "END"
 
 
 def copy_row_style(ws, src_row: int, dst_row: int, max_col: int = 18):
@@ -140,11 +169,16 @@ def copy_row_style(ws, src_row: int, dst_row: int, max_col: int = 18):
 
 
 def get_next_seq(wb: openpyxl.Workbook) -> int:
+    """END 위에서 역방향 스캔으로 마지막 유효 순번 탐색 후 +1 반환."""
     ws = wb["Sheet1"]
     er = find_end_row(ws)
-    if er <= 3: return 1
-    try:    return int(ws.cell(er - 1, 1).value) + 1
-    except: return max(1, er - 2)
+    for r in range(er - 1, 2, -1):   # er-1 → row 3 역방향
+        val = ws.cell(r, 1).value
+        try:
+            return int(val) + 1
+        except (TypeError, ValueError):
+            continue
+    return 1
 
 
 def append_upload_row(wb: openpyxl.Workbook, info: dict, seq: int):

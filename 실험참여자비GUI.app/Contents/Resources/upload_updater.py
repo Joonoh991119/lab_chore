@@ -29,15 +29,18 @@ def _valid_xlsx(p):
 def load_wb():
     if os.path.exists(OUTPUT_UPLOAD) and _valid_xlsx(OUTPUT_UPLOAD):
         return openpyxl.load_workbook(OUTPUT_UPLOAD)
-    src = None
     if os.path.exists(UPLOAD_TEMPLATE) and _valid_xlsx(UPLOAD_TEMPLATE):
-        src = UPLOAD_TEMPLATE; shutil.copy2(src, OUTPUT_UPLOAD)
+        shutil.copy2(UPLOAD_TEMPLATE, OUTPUT_UPLOAD)
     elif os.path.exists(UPLOAD_BACKUP):
         with open(UPLOAD_BACKUP,"rb") as f: data = f.read()
         with open(OUTPUT_UPLOAD,"wb") as f: f.write(data)
     else:
         raise FileNotFoundError(f"업로드 양식 템플릿을 찾을 수 없습니다.\n원본: {UPLOAD_TEMPLATE}\n백업: {UPLOAD_BACKUP}")
     print(f"[INFO] 출력 파일 생성: {OUTPUT_UPLOAD}")
+    # 샘플 데이터 제거 후 저장
+    wb_new = openpyxl.load_workbook(OUTPUT_UPLOAD)
+    _init_fresh_output(wb_new["Sheet1"])
+    wb_new.save(OUTPUT_UPLOAD)
     return openpyxl.load_workbook(OUTPUT_UPLOAD)
 
 def read_info(path):
@@ -62,6 +65,16 @@ def end_row(ws):
         if str(r[0].value).strip().upper()=="END": return r[0].row
     return ws.max_row+1
 
+def _init_fresh_output(ws):
+    """샘플 데이터(금동이·은동이 등) 제거, row 3 스타일 보존, row 4 = END."""
+    er = end_row(ws)
+    for col in range(1, 19):
+        ws.cell(3, col).value = None     # 값만 제거, 스타일 유지
+    rows_to_delete = er - 4
+    if rows_to_delete > 0:
+        ws.delete_rows(4, rows_to_delete)
+    ws.cell(4, 1).value = "END"
+
 def copy_row_style(ws, src_row: int, dst_row: int, max_col: int = 18):
     """src_row의 폰트·테두리·채우기·정렬·행높이를 dst_row에 복사."""
     src_dim = ws.row_dimensions[src_row]
@@ -79,9 +92,10 @@ def copy_row_style(ws, src_row: int, dst_row: int, max_col: int = 18):
 
 def next_seq(wb):
     ws=wb["Sheet1"]; er=end_row(ws)
-    if er<=3: return 1
-    try: return int(ws.cell(er-1,1).value)+1
-    except: return max(1,er-2)
+    for r in range(er-1, 2, -1):
+        try: return int(ws.cell(r,1).value)+1
+        except (TypeError, ValueError): continue
+    return 1
 
 def append_row(wb, info, seq):
     ws  = wb["Sheet1"]
