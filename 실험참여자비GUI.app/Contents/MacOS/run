@@ -1,0 +1,45 @@
+#!/bin/bash
+# ─────────────────────────────────────────────────────────────────────────────
+#  실험참여자비GUI.app  —  macOS .app launcher
+#  이 .app을 Excel 템플릿 파일들이 있는 폴더에 넣고 더블클릭하세요.
+# ─────────────────────────────────────────────────────────────────────────────
+
+SCRIPT_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RESOURCES="$SCRIPT_PATH/../Resources"
+TEMPLATES_DIR="$(cd "$SCRIPT_PATH/../../.." && pwd)"
+export LAB_CHORE_DIR="$TEMPLATES_DIR"
+
+PYTHON=""
+for py in \
+    "$HOME/.pyenv/shims/python3" \
+    "/opt/homebrew/bin/python3" \
+    "/usr/local/bin/python3" \
+    "/usr/bin/python3" \
+    "python3"; do
+    if "$py" --version &>/dev/null 2>&1; then
+        PYTHON="$py"
+        break
+    fi
+done
+
+if [ -z "$PYTHON" ]; then
+    osascript -e 'display alert "Python 3를 찾을 수 없습니다." message "터미널에서 다음을 실행하세요:\n\n  brew install python\n\n그 후 앱을 다시 실행하세요." as critical'
+    exit 1
+fi
+
+if ! "$PYTHON" -m streamlit --version &>/dev/null 2>&1; then
+    osascript -e 'display dialog "Streamlit을 설치합니다 (최초 1회, 약 30초).\n\n확인을 누르면 시작합니다." buttons {"취소", "확인"} default button "확인"' 2>/dev/null
+    [ $? -ne 0 ] && exit 0
+    "$PYTHON" -m pip install streamlit openpyxl --quiet --break-system-packages 2>/dev/null \
+        || "$PYTHON" -m pip install streamlit openpyxl --quiet
+fi
+
+PORT=8501
+lsof -ti tcp:$PORT | xargs kill -9 2>/dev/null
+
+cd "$TEMPLATES_DIR"
+"$PYTHON" -m streamlit run \
+    "$RESOURCES/app.py" \
+    --server.port $PORT \
+    --server.headless false \
+    --browser.gatherUsageStats false

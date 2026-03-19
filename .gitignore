@@ -1,0 +1,20 @@
+# 개인정보 포함 실험 데이터 — git 추적 제외
+실험참여자비 양식_*.xlsx
+실험참여자비 양식(*).xlsx
+일회성경비지급자_업로드양식_작성.xlsx
+template_*.xlsx
+template_*.xlsx.sb-*
+
+# Python
+__pycache__/
+*.py[cod]
+.env
+venv/
+.venv/
+
+# macOS
+.DS_Store
+.AppleDouble
+._*
+.Spotlight-V100
+.Trashes
