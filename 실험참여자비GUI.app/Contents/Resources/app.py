@@ -4,6 +4,7 @@
 의존: pip install streamlit openpyxl streamlit-drawable-canvas Pillow
 """
 import os, re, shutil, io, datetime, subprocess, unicodedata, zipfile
+from copy import copy
 import openpyxl
 from openpyxl.drawing.image import Image as XLImage
 import streamlit as st
@@ -118,6 +119,26 @@ def find_end_row(ws) -> int:
     return ws.max_row + 1
 
 
+def copy_row_style(ws, src_row: int, dst_row: int, max_col: int = 18):
+    """src_row의 폰트·테두리·채우기·정렬·행높이를 dst_row에 그대로 복사."""
+    # 행 높이 복사
+    src_dim = ws.row_dimensions[src_row]
+    dst_dim = ws.row_dimensions[dst_row]
+    dst_dim.height = src_dim.height
+
+    # 각 셀 스타일 복사
+    for col in range(1, max_col + 1):
+        src = ws.cell(src_row, col)
+        dst = ws.cell(dst_row, col)
+        if src.has_style:
+            dst.font          = copy(src.font)
+            dst.border        = copy(src.border)
+            dst.fill          = copy(src.fill)
+            dst.number_format = src.number_format
+            dst.protection    = copy(src.protection)
+            dst.alignment     = copy(src.alignment)
+
+
 def get_next_seq(wb: openpyxl.Workbook) -> int:
     ws = wb["Sheet1"]
     er = find_end_row(ws)
@@ -127,9 +148,18 @@ def get_next_seq(wb: openpyxl.Workbook) -> int:
 
 
 def append_upload_row(wb: openpyxl.Workbook, info: dict, seq: int):
-    ws = wb["Sheet1"]
-    r  = find_end_row(ws)
-    ws.insert_rows(r)
+    ws  = wb["Sheet1"]
+    r   = find_end_row(ws)
+
+    # 스타일 참조 행: 마지막 데이터 행(r-1), 없으면 샘플 행 3
+    ref_row = (r - 1) if r > 3 else 3
+
+    ws.insert_rows(r)  # END 행을 아래로 밀고 빈 행 삽입
+
+    # ① 스타일 먼저 복사 (값보다 앞서야 number_format 등이 제대로 적용됨)
+    copy_row_style(ws, ref_row, r)
+
+    # ② 값 기입
     vals = [
         seq, info["name"], info["inst"],
         info["jid_front"], info["jid_back"],

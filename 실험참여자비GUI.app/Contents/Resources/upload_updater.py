@@ -7,6 +7,7 @@
 의존: pip install openpyxl
 """
 import sys, os, shutil, zipfile, io, unicodedata
+from copy import copy
 import openpyxl
 
 WORK_DIR = os.environ.get("LAB_CHORE_DIR", os.path.dirname(os.path.abspath(__file__)))
@@ -61,6 +62,21 @@ def end_row(ws):
         if str(r[0].value).strip().upper()=="END": return r[0].row
     return ws.max_row+1
 
+def copy_row_style(ws, src_row: int, dst_row: int, max_col: int = 18):
+    """src_row의 폰트·테두리·채우기·정렬·행높이를 dst_row에 복사."""
+    src_dim = ws.row_dimensions[src_row]
+    ws.row_dimensions[dst_row].height = src_dim.height
+    for col in range(1, max_col + 1):
+        src = ws.cell(src_row, col)
+        dst = ws.cell(dst_row, col)
+        if src.has_style:
+            dst.font          = copy(src.font)
+            dst.border        = copy(src.border)
+            dst.fill          = copy(src.fill)
+            dst.number_format = src.number_format
+            dst.protection    = copy(src.protection)
+            dst.alignment     = copy(src.alignment)
+
 def next_seq(wb):
     ws=wb["Sheet1"]; er=end_row(ws)
     if er<=3: return 1
@@ -68,7 +84,11 @@ def next_seq(wb):
     except: return max(1,er-2)
 
 def append_row(wb, info, seq):
-    ws=wb["Sheet1"]; r=end_row(ws); ws.insert_rows(r)
+    ws  = wb["Sheet1"]
+    r   = end_row(ws)
+    ref = (r - 1) if r > 3 else 3   # 스타일 참조 행
+    ws.insert_rows(r)
+    copy_row_style(ws, ref, r)       # 스타일 먼저 복사
     vals = [seq, info["name"], info["inst"], info["jid_front"], info["jid_back"],
             f'=IF(H{r}="대한민국","N","Y")', "", DEFAULT_NATIONALITY,
             DEFAULT_INCOME_TYPE, DEFAULT_INCOME_DETAIL, info["amount"],
